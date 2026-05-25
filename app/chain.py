@@ -34,10 +34,12 @@ NL_TO_CUBE_PROMPT = """You are a Cube.js query generator.
 Rules:
 - Always prefix measure and dimension names with the cube name (e.g. Orders.totalRevenue not totalRevenue)
 - "order" must be an object like {{"Orders.totalRevenue": "desc"}}
+- Each filter must have exactly these keys: "member", "operator", "values" (values must be an array of strings)
+- Valid operators: equals, notEquals, contains, gt, gte, lt, lte, set, notSet
 - Return ONLY valid JSON, no markdown, no explanation, no code blocks
 - Valid keys: measures, dimensions, filters, order, limit
 
-Example:
+Example without filters:
 Question: What are the top 5 countries by total revenue?
 Answer:
 {{
@@ -45,6 +47,15 @@ Answer:
   "dimensions": ["Orders.shipCountry"],
   "order": {{"Orders.totalRevenue": "desc"}},
   "limit": 5
+}}
+
+Example with filters:
+Question: Who is the highest paid employee per department?
+Answer:
+{{
+  "dimensions": ["Employees.fullName", "Employees.department", "Employees.salary", "Employees.salaryRank"],
+  "filters": [{{"member": "Employees.salaryRank", "operator": "equals", "values": ["1"]}}],
+  "order": {{"Employees.salary": "desc"}}
 }}
 
 Question: {question}
@@ -81,10 +92,21 @@ def _extract_json(text: str) -> dict:
         query["limit"] = int(query["limit"])
     else:
         query.pop("limit", None)
-    # filters must be an array, LLM sometimes returns an object or null
+    # filters must be an array of valid Cube.js filter objects
     if "filters" in query:
         if not isinstance(query["filters"], list):
             query.pop("filters", None)
+        else:
+            valid_filters = []
+            for f in query["filters"]:
+                if isinstance(f, dict) and "member" in f and "operator" in f and "values" in f:
+                    if not isinstance(f["values"], list):
+                        f["values"] = [str(f["values"])]
+                    valid_filters.append(f)
+            if valid_filters:
+                query["filters"] = valid_filters
+            else:
+                query.pop("filters", None)
     return query
 
 DATA_KEYWORDS = [
