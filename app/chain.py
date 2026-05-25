@@ -81,6 +81,10 @@ def _extract_json(text: str) -> dict:
         query["limit"] = int(query["limit"])
     else:
         query.pop("limit", None)
+    # filters must be an array, LLM sometimes returns an object or null
+    if "filters" in query:
+        if not isinstance(query["filters"], list):
+            query.pop("filters", None)
     return query
 
 DATA_KEYWORDS = [
