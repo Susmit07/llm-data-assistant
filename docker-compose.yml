@@ -27,5 +27,20 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      CUBEJS_URL: http://cubejs:4000
+      CUBEJS_API_SECRET: dev-secret
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: phi3
+    ports:
+      - "8501:8501"
+    depends_on:
+      - cubejs
+      - ollama
+
 volumes:
   ollama_data:
