@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  cubejs:
+    image: cubejs/cube:latest
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: host.docker.internal
+      CUBEJS_DB_PORT: 5433
+      CUBEJS_DB_NAME: northwind
+      CUBEJS_DB_USER: admin
+      CUBEJS_DB_PASS: secret
+      CUBEJS_API_SECRET: dev-secret
+      CUBEJS_DEV_MODE: "true"
+    volumes:
+      - ./cubejs/schema:/cube/conf/model
+      - ./cubejs/cube.js:/cube/conf/cube.js
+    ports:
+      - "4000:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:
