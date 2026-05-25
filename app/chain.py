@@ -121,27 +121,26 @@ def _is_data_question(question: str) -> bool:
     q = question.lower()
     return any(kw in q for kw in DATA_KEYWORDS)
 
-def run_chain(question: str) -> dict:
-    # Guard: only handle data-related questions
-    if not _is_data_question(question):
-        return {"answer": "I can only answer questions about the Northwind dataset — orders, products, customers, employees, revenue, and inventory. Try asking something like 'What are the top 5 countries by revenue?'", "cube_query": None, "raw_data": None}
-
-    # Step 1: NL -> Cube.js JSON
-    prompt1 = NL_TO_CUBE_PROMPT.format(schema=CUBE_SCHEMA, question=question)
-    raw_output = _call_ollama(prompt1)
+def generate_cube_query(question: str) -> dict:
+    """Step 1 only: NL -> Cube.js JSON. Returns the query for user review."""
+    prompt = NL_TO_CUBE_PROMPT.format(schema=CUBE_SCHEMA, question=question)
+    raw_output = _call_ollama(prompt)
 
     try:
         cube_query = _extract_json(raw_output)
     except (ValueError, json.JSONDecodeError):
-        # retry with stricter prompt
-        retry_prompt = prompt1 + "\nIMPORTANT: Return ONLY the JSON object, nothing else."
+        retry_prompt = prompt + "\nIMPORTANT: Return ONLY the JSON object, nothing else."
         raw_output = _call_ollama(retry_prompt)
         try:
             cube_query = _extract_json(raw_output)
         except (ValueError, json.JSONDecodeError) as e:
             return {"error": f"LLM did not return valid JSON: {str(e)}", "raw": raw_output}
 
-    # Step 2: Execute against Cube.js
+    return {"cube_query": cube_query}
+
+
+def execute_and_answer(question: str, cube_query: dict) -> dict:
+    """Step 2+3: Execute confirmed query against Cube.js, return NL answer."""
     try:
         cube_result = run_cube_query(cube_query)
     except requests.HTTPError as e:
@@ -150,10 +149,9 @@ def run_chain(question: str) -> dict:
     if not cube_result:
         return {"answer": "No data found for that question.", "cube_query": cube_query, "raw_data": []}
 
-    # Step 3: raw data -> natural language answer
     prompt2 = METRIC_TO_NL_PROMPT.format(
         question=question,
-        data=json.dumps(cube_result[:10])  # cap at 10 rows to keep prompt small
+        data=json.dumps(cube_result[:10])
     )
     answer = _call_ollama(prompt2)
 
