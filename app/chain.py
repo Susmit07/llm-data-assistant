@@ -79,14 +79,28 @@ def _call_ollama(prompt: str) -> str:
     response.raise_for_status()
     return response.json()["response"].strip()
 
-def _extract_json(text: str) -> dict:
-    # strip markdown code blocks if present
+def _clean_json_str(text: str) -> str:
+    # strip markdown code blocks
     text = re.sub(r"```(?:json)?", "", text).strip()
-    # find first {...} block
+    # extract first {...} block
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON found in LLM output: {text}")
-    query = json.loads(match.group())
+    text = match.group()
+    # replace single quotes with double quotes
+    text = re.sub(r"'([^']*)'", r'"\1"', text)
+    # remove trailing commas before } or ]
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    return text
+
+def _extract_json(text: str) -> dict:
+    text = _clean_json_str(text)
+    try:
+        query = json.loads(text)
+    except json.JSONDecodeError:
+        # last resort: try ast.literal_eval for python-style dicts
+        import ast
+        query = ast.literal_eval(text)
     # Cube.js requires limit to be an int, LLM sometimes returns a string
     if query.get("limit") is not None:
         query["limit"] = int(query["limit"])
